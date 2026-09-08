@@ -1,9 +1,9 @@
 {
   "_comment": "이 서버는 stdio 방식입니다. Claude Desktop이 node 프로세스를 직접 실행해 stdin/stdout으로 통신하므로, 별도로 서버를 미리 띄우거나 mcp-remote 같은 프록시를 실행할 필요가 없습니다. args의 경로만 본인 PC의 실제 프로젝트 경로로 맞추면 됩니다.",
   "mcpServers": {
-    "construction-alert-mcp-local": {
+    "seoul-construction-mcp": {
       "command": "node",
-      "args": ["C:\\Users\\USER\\Projects\\seoul-construction-mcp\\src\\index.js"],
+      "args": ["여기에_본인_PC의_실제_경로/seoul-construction-mcp/src/index.js"],
       "env": {
         "SEOUL_OPENAPI_KEY": "여기에_본인의_서울시_열린데이터광장_인증키_입력"
       }
