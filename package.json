@@ -1,7 +1,7 @@
 {
-  "name": "construction-alert-mcp",
+  "name": "seoul-construction-mcp",
   "version": "0.1.0",
-  "description": "서울시 건설알림이 MCP 서버",
+  "description": "서울시 건설알림이 MCP 서버 (로컬 stdio 전용)",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -11,6 +11,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "zod": "^4.4.3"
   }
 }

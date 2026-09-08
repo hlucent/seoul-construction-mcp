@@ -1,3 +1,5 @@
 node_modules/
 .env
 fly.toml
+*.bak-http
+_to_delete/
