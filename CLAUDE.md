@@ -2,19 +2,23 @@
 
 ## 프로젝트 개요
 서울시 열린데이터광장의 건설공사 관련 데이터를 MCP(Model Context Protocol) 서버로
-제공하는 프로젝트. Claude.ai에서 커넥터로 연결해 자연어로 서울시 공사 현황을
+제공하는 프로젝트. Claude Desktop/Code에 로컬로 등록해 자연어로 서울시 공사 현황을
 검색/조회할 수 있게 해준다.
 
-- 배포 주소: 없음 — fly.io 앱(seoul-construction-mcp)은 2026-09-03에 완전히
-  삭제됨. 현재는 로컬/각자 설치 방식으로만 운영 (README.md "설치 방법 → 1. 로컬 설치" 참고).
+- 배포 방식: **로컬 전용(stdio)**. 클라우드 서버나 URL이 없다 — 각자 이 저장소를
+  clone해 자기 컴퓨터에서 Claude가 직접 프로세스를 실행하는 방식이다. (과거
+  fly.io 웹 배포 버전은 2026-09-03에 완전히 삭제됐고, 2026-09-08에 stdio 구조로
+  전환하며 관련 코드/설정도 모두 제거함. 배경은 DEVLOG.md "2026-09-07~08" 항목
+  참고.)
 - GitHub: hlucent/seoul-construction-mcp
 - **실제 작업 폴더(확정): C:\Users\hwang\Projects\seoul-construction-mcp**
+  (집 PC) / **C:\Users\USER\Projects\seoul-construction-mcp** (사무실 PC)
   (.git 존재, origin이 github.com/hlucent/seoul-construction-mcp로 연결됨,
   최신 커밋과 코드가 일치하는 진짜 작업 폴더)
-- 실제 코드 진입점: src/index.js (Node.js 프로젝트. main.py 아님)
-- 참고: 과거 저장소명은 construction-alert-mcp, 작업 폴더는
-  C:\Users\hwang\project\construction-alert-mcp였으나 이후 seoul-construction-mcp로
-  개편됨. 앞으로 이 프로젝트 작업은 반드시 위 Projects 폴더에서만 진행할 것.
+- 실제 코드 진입점: src/index.js (Node.js 프로젝트, 단일 파일. main.py 아님)
+- 참고: 과거 저장소명은 construction-alert-mcp였으나 이후 seoul-construction-mcp로
+  개편됨(package.json의 name, index.js의 serverInfo.name 모두 통일 완료). 앞으로
+  이 프로젝트 작업은 반드시 위 Projects 폴더에서만 진행할 것.
 - 사용자(청정)는 비개발자 — 모든 안내는 복사-붙여넣기 가능한 완성된 명령어로,
   어느 창(PowerShell/메모장/브라우저)에 입력하는지 명확히 구분해서 제공할 것.
 
@@ -30,24 +34,26 @@
    - 대형 장기사업(예: 강남순환도시고속도로)은 주기적으로 사진 업데이트됨
 
 ## 아키텍처 핵심 사항
-- HTTP 기반 StreamableHTTPServerTransport 사용 (fly.dev 배포 필수 조건, stdio 아님)
-- 인증 방식(2026-08-24 재도입): 쿼리 파라미터 `?key=`를 `MCP_ACCESS_KEY`(서버 전용
-  접근 비밀키)와 timingSafeEqual로 비교. 키 없거나 틀리면 401로 강제 거부.
-  rate limit 미들웨어보다 먼저 실행되어, 인증 실패 요청은 rate limit 카운터를
-  소모하지 않는다.
-  (과거 2026-08-16 커밋 d29cc50에서 사용 편의성을 위해 ?key= 인증을 한 번
-  제거했었으나, 2026-08-24에 "타인 접속 완전 차단"이 목표로 바뀌며 다시 추가함.
-  이번엔 "사용자가 자기 서울API키를 제공"하는 방식이 아니라 "서버가 전용
-  비밀키를 자체 보유하고 대조"하는 방식으로 설계가 다름.)
-- SEOUL_OPENAPI_KEY(서울시 업스트림 API 호출용)와 MCP_ACCESS_KEY(이 서버
-  자체 접근용)는 서로 다른 목적의 별개 키. 둘 다 fly secrets로 서버가 보유.
+- **stdio 전송 방식**: `StdioServerTransport` 사용. Claude Desktop/Code가 node
+  프로세스를 직접 실행해 stdin/stdout으로 통신한다. HTTP 서버, express, 인증
+  (`?key=`), rate limit, 별도 프록시(mcp-remote 등)가 전부 없다 — 이 프로세스
+  자체가 실행하는 컴퓨터 안에서만 동작하므로 외부에서 접근할 방법이 없어
+  인증이 불필요하다.
+- `SEOUL_OPENAPI_KEY`(서울시 업스트림 API 호출용)만 필요한 유일한 키. Claude
+  Desktop/Code 설정 파일의 `env` 항목에 직접 넣거나, 로컬 수동 테스트 시에는
+  `.env` 파일로 넣는다(`dotenv/config`로 로드).
 - CDATA XML 파싱 이슈 수정 완료
-- fly.toml: 앱 이름은 2026-08-24부터 GitHub에 커밋하지 않음(.gitignore 처리) —
-  저장소명만으로 실제 fly.io 앱 주소를 유추할 수 없게 하기 위함. 로컬 fly.toml에서
-  실제 값 확인.
-  internal_port 8080, auto_stop/start_machines 켜짐
-- Dockerfile: node:20-slim → npm ci --omit=dev → node src/index.js 실행
-- 로컬 .env는 테스트 전용 (SEOUL_OPENAPI_KEY, MCP_ACCESS_KEY 둘 다 필요)
+- Dockerfile, deploy.ps1(과거 fly.io 배포용)은 2026-09-08 stdio 전환 시 저장소에서
+  삭제함(git 히스토리에는 남아있음).
+- 참고: 로컬 실행 시 필요한 유일한 npm 스크립트는 `npm start`(=`node src/index.js`).
+- Claude Desktop 등록 시 주의점 (실제로 겪은 트러블, DEVLOG 2026-09-07~08 참고):
+  - Microsoft Store(MSIX) 버전은 `%APPDATA%\Claude\claude_desktop_config.json`이
+    아니라 `%LOCALAPPDATA%\Packages\Claude_<임의문자열>\LocalCache\Roaming\Claude\claude_desktop_config.json`이
+    실제 설정 파일이다. 겉보기 표준 경로를 아무리 고쳐도 반영 안 되면 이 경로부터
+    확인할 것.
+  - `"command": "node"`보다 `"command"`를 node.exe 전체 경로(예:
+    `C:\\Program Files\\nodejs\\node.exe`, PowerShell의
+    `(Get-Command node).Source`로 확인)로 지정하는 쪽이 더 안정적으로 연결됨.
 
 ## 요청 작성 기본 틀 — 접수표 5칸
 Claude Code에게 새 작업을 요청할 때는 항상 아래 5가지를 채워서 지시할 것.
@@ -80,8 +86,9 @@ Claude Code에게 새 작업을 요청할 때는 항상 아래 5가지를 채워
 - 이 프로젝트에서 스킬화 후보:
   - 새 서울시 열린데이터 API를 도구로 추가하는 절차 (엔드포인트 등록 →
     파싱 로직 → CDATA 이슈 처리 → 테스트 → 커밋 메시지 규칙까지 일련의 절차)
-- deploy.ps1(아래 참고)이 이미 배포 자동화는 스크립트화해두었으므로,
-  다음 스킬화 후보는 "새 데이터셋 통합 절차" 쪽에 집중할 것.
+  - Claude Desktop에 신규 컴퓨터를 등록하는 절차 (config 경로 확인 →
+    Microsoft Store 버전 여부 판별 → node 전체 경로 확인 → 등록 → 완전종료 후
+    재확인)
 
 ## 결과물 방향이 애매할 때 — 후보 병렬 요청법
 - 어떤 형식/구조로 결과물을 받아야 할지 스스로도 확신이 없을 때는,
@@ -102,18 +109,15 @@ Claude Code에게 새 작업을 요청할 때는 항상 아래 5가지를 채워
   (2026-08-05, Downloads 사본 삭제 건 — 다행히 안전한 사본이라 문제는 없었음).
   삭제·이름변경·덮어쓰기 등은 "물어보겠다"는 말만으로 안심하지 말고, 실제로
   실행 여부를 다시 확인할 것.**
-- 문서(README.md, DEVLOG.md 등)만 수정한 경우에는 fly.dev 재배포가 필요 없다는 것을
-  Claude Code가 먼저 판단하게 하고, 재배포 여부가 애매하면 "지금 상태에서 재배포가
-  필요 없다는 게 맞는지 확인해줘"라고 검증을 요청할 것 (git diff로 코드 파일 변경
-  여부를 확인하고, 필요하면 라이브 엔드포인트에 직접 요청을 보내 검증하는 방식).
 
-## 자동 검증 원칙 (Playwright 방식)
+## 자동 검증 원칙
 - Claude Code가 "완료했습니다"라고 보고할 때, 가능하면 아래처럼
   **AI가 스스로 실제 동작을 확인**하도록 요청할 것:
-  - 새 도구/기능이면: "직접 접속해서 값 넣어보고 정상 응답 오는지 확인해줘"
+  - 새 도구/기능이면: "stdin으로 직접 JSON-RPC 요청을 넣어보고 정상 응답 오는지
+    확인해줘" (예: `echo '{...initialize...}' | node src/index.js`)
+  - 실데이터 조회 도구면: "실제 서울시 API를 호출해서 진짜 데이터가 나오는지까지
+    확인해줘" (가짜/모의 데이터로 채우지 않았는지 확인)
   - 삭제/수정 기능이면: "실제로 삭제(또는 수정)가 반영되는지까지 확인하고 보고해줘"
-- deploy.ps1의 마지막 단계(smoke test)가 정확히 이 역할을 자동으로 수행한다:
-  배포된 엔드포인트에 실제 initialize 요청을 보내 정상 응답하는지 확인.
 
 ## 결과 보고 시 3대 검증 체크리스트
 Claude Code가 "완료했습니다"라고 보고하면, 다음 3가지를 반드시 순서대로 확인한다.
@@ -138,26 +142,28 @@ Claude Code가 "완료했습니다"라고 보고하면, 다음 3가지를 반드
 ## 민감정보 처리 원칙
 - 전화번호, 담당자 실명 등 개인 식별 가능한 정보는 **파일이나 커밋 메시지에 그대로 남기지 말 것**.
 - 로그·문서화 시 담당자명은 마스킹하거나 직책만 표기 (예: "담당자: ○○○" → "담당 부서명"으로 대체 가능한 경우 대체).
+- `SEOUL_OPENAPI_KEY` 값 자체도 커밋·로그·문서에 노출하지 말 것 — 항상 플레이스홀더로만 표기.
 
 ## 결과물 완성 기준 (합격 조건)
 - "완료했습니다"는 선언일 뿐 실제 완성이 아님 — 아래 조건을 모두 만족해야 "완료"로 인정:
-  1. 배포 후 fly.dev 엔드포인트에서 실제 응답 확인 (deploy.ps1의 smoke test 또는
-     Claude Desktop 재연결 테스트)
-  2. 변경된 도구가 Claude.ai 커넥터 재연결 후 정상 노출되는지 확인
+  1. stdin으로 직접 JSON-RPC(`initialize`, `tools/list` 등) 요청을 넣어 정상
+     응답 확인
+  2. Claude Desktop/Code 재연결 후 도구가 정상 노출되고, 실제 호출 시 진짜
+     서울시 데이터가 반환되는지 확인
   3. 커밋 메시지가 "구체적으로" 작성되었는지 확인 (예: "수정", "fix" 금지)
 - 위 3가지를 확인하지 않은 상태에서 "다음 작업으로 넘어가자"고 하지 말 것.
 
 ## 보고 및 확인 원칙
 - Claude Code가 "다 했습니다"라고 보고하면, **곧바로 다음 지시를 내리지 말고 반드시 관련 파일을 열어
   직접 확인**한 뒤 다음 단계로 진행할 것.
-  (예: src/index.js 수정 후 → 실제 파일 내용 확인 / 배포 후 → fly.dev 응답 확인)
+  (예: src/index.js 수정 후 → 실제 파일 내용 확인 / Desktop 재연결 후 → 도구 목록·실제 응답 확인)
 
 ## 위험 작업 사전 차단 원칙 (일반)
 - 아래 작업은 사전에 명시적 확인 없이는 절대 진행하지 않는다:
   - API 키, 인증 정보 등을 로그/커밋/문서에 노출하는 행위
-  - src/index.js, deploy.ps1 등 핵심 파일의 "삭제" 또는 "통째로 덮어쓰기"
+  - src/index.js 등 핵심 파일의 "삭제" 또는 "통째로 덮어쓰기"
   - 폴더/파일 삭제, 이름 변경 등 되돌리기 어려운 작업
-  - .env, fly secrets 등 설정의 임의 변경
+  - .env, Claude Desktop 설정 파일 등의 임의 변경
 - "교체"라는 단어가 Claude Code의 계획서에 나오면 반드시 재확인.
 - "먼저 확인해보겠다"고 말한 뒤 실제로는 먼저 실행해버리는 경우가 있었으므로,
   삭제·이름변경류 작업은 결과 메시지를 반드시 다시 확인할 것.
@@ -190,60 +196,12 @@ Claude Code로 작업을 시작하기 전, 항상 아래 세 가지를 먼저 �
 - auto 옵션도 있음 (Claude가 작업 난이도에 맞게 자동 조절하는 것으로 추정 —
   실제로 몇 번 써보고 어떻게 동작하는지 확인 후 이 문서에 보완할 것)
 
-## 배포 워크플로우 (deploy.ps1 — 2026-08-05 실전 검증 완료)
+## 새 도구 추가 / 큰 로직 변경 시 주의
+main 브랜치가 곧 실제 사용 중인 상태이므로, 실험적이거나 리스크가 있는
+작업은 계획(Plan 모드)을 먼저 검토한 뒤 진행할 것.
 
-이 프로젝트는 이전까지 자동화 스크립트 없이, 매 세션마다 Claude Code가 직접
-git commit → push → flyctl deploy 순서를 손으로 반복해왔다. 2026-08-05에
-이를 deploy.ps1 스크립트 하나로 통합했고, 실제 배포까지 두 차례 실행해
-정상 동작을 확인했다 (커밋 ce222be, 6cb9b89).
-
-### 사용법
-```
-cd C:\Users\hwang\Projects\seoul-construction-mcp
-.\deploy.ps1 -CommitMessage "커밋메시지"
-```
-
-- **"커밋메시지" 앞에 반드시 `-CommitMessage`를 붙일 것.**
-- 커밋할 변경사항이 이미 없다면 메시지 없이 그냥 `.\deploy.ps1`만 실행해도 됨
-- 옵션: `-SkipSyntaxCheck`, `-SkipSmokeTest`로 개별 단계 생략 가능
-
-### deploy.ps1이 자동으로 처리하는 것 (기존에 손으로 하던 순서 그대로)
-1. `node --check src/index.js` — 문법 확인
-2. 커밋 안 된 변경사항 있으면 `-CommitMessage`로 커밋
-   (메시지 없으면 중단 — 의도치 않은 커밋 방지)
-3. `git fetch` 후 원격에 새 커밋 있으면 `git pull --rebase`
-4. `git push`
-5. `flyctl deploy`
-6. `.env`의 키로 배포된 엔드포인트에 실제 initialize 요청을 보내 정상 응답하는지
-   확인 (smoke test)
-
-### 문서만 수정한 경우 (README.md, DEVLOG.md 등)
-- 서버 코드(src/, Dockerfile, package.json, fly.toml)가 바뀌지 않았다면
-  fly.dev 재배포는 불필요. git add → commit → push만 하면 됨.
-- 애매하면 Claude Code에게 "지금 상태에서 fly.dev 재배포가 필요 없다는 게
-  맞는지 확인해줘"라고 요청 — git diff로 코드 파일 변경 여부를 확인하고,
-  필요하면 라이브 엔드포인트에 직접 tools/list 등을 호출해 최신 코드가 이미
-  반영돼 있는지 검증하는 방식으로 답한다.
-
-### 알려진 사소한 이슈
-- Windows PowerShell 5.1은 BOM(Byte Order Mark) 없는 UTF-8 파일의 한글 주석을
-  잘못 해석해 문법 오류를 낼 수 있음 → deploy.ps1은 UTF-8 BOM 포함으로 저장됨.
-  이 스크립트를 다시 작성/수정할 때는 BOM을 유지할 것.
-- `Invoke-WebRequest`는 비대화형 세션에서 `-UseBasicParsing` 옵션이 없으면
-  서버의 `text/event-stream` 응답 타입을 인식 못 해 실패할 수 있음 → smoke test
-  단계는 이 옵션을 포함해 작성되어 있음.
-- 배포 중 fly.dev가 "The app is not listening on the expected address" 경고를
-  한 번 낼 수 있는데, 이는 롤링 배포 과정의 일시적 정상 현상이며 이후 health
-  check와 smoke test가 모두 통과하면 문제 없음.
-
-### 새 도구 추가 / 큰 로직 변경 시 주의
-main 브랜치가 곧 실제 서비스 중인 상태이므로, 실험적이거나 리스크가 있는
-작업은 계획(Plan 모드)을 먼저 검토한 뒤 진행할 것. 브랜치를 나눠 작업하는
-방식은 아직 실제로 사용해본 적이 없으므로, 필요하다고 판단되면 Claude Code에게
-"브랜치에서 어떻게 로컬 테스트할지부터 먼저 알려줘"라고 물어본 뒤 진행할 것.
-
-### 문제 발생 시 롤백
-- 배포 후 문제가 생겼는데 원인을 모를 때, "고쳐줘"를 반복하지 말 것
+## 문제 발생 시 롤백
+- 문제가 생겼는데 원인을 모를 때, "고쳐줘"를 반복하지 말 것
   (고칠수록 코드가 꼬여서 더 악화될 수 있음)
 - 대신 아래처럼 직전 정상 커밋으로 되돌리도록 지시:
   "직전에 정상 동작했던 커밋으로 되돌려줘"
@@ -253,8 +211,8 @@ main 브랜치가 곧 실제 서비스 중인 상태이므로, 실험적이거�
 - 롤백처럼 반복 시도가 필요한 디버깅 작업은 토큰을 많이 쓰므로,
   이럴 때는 Effort를 medium으로 낮춰 시도 횟수를 늘리는 것도 방법
 
-### 커밋 메시지 원칙
-- `-CommitMessage`로 넘기는 값은 항상 무엇을 했는지 구체적으로 작성
+## 커밋 메시지 원칙
+- 항상 무엇을 했는지 구체적으로 작성
 - 좋은 예: "get_construction_project_photos 사진 없는 사업 예외처리 추가"
 - 나쁜 예: "수정", "업데이트", "fix"
 - 구체적인 메시지가 있어야 나중에 "OO 기능 추가 전 커밋으로 되돌려줘" 같은
@@ -268,10 +226,10 @@ main 브랜치가 곧 실제 서비스 중인 상태이므로, 실험적이거�
 ## 향후 계획
 - 서울시 열린데이터 추가 데이터셋 신규 도구화 검토 중
 - 이 CLAUDE.md는 GitHub 저장소(hlucent/seoul-construction-mcp)에 커밋되어
-  있어 PC 포맷 시에도 유실되지 않음 (전역 CLAUDE.md는
-  C:\Users\hwang\.claude\CLAUDE.md에 있으나 로컬 전용이라 포맷 시 사라짐 —
-  프로젝트별 CLAUDE.md는 반드시 저장소에 커밋해 별도 보관)
+  있어 PC 포맷 시에도 유실되지 않음 (전역 CLAUDE.md는 로컬 전용이라 포맷 시
+  사라짐 — 프로젝트별 CLAUDE.md는 반드시 저장소에 커밋해 별도 보관)
 - 새 데이터셋 통합 시 한 번에 통째로 요청하지 않고, 위 "문제 분할 원칙"에 따라
   작은 단위로 쪼개서 요청
 - 반복되는 API 통합 절차는 위 "스킬(Skill)화 원칙"에 따라 스킬 파일로 정리해
   토큰 사용량 관리
+- 집 PC(hwang 계정)에도 이번 사무실 PC와 같은 stdio 방식으로 등록 예정

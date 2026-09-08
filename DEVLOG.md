@@ -314,3 +314,44 @@ API 스펙과 무관한 임의 값인지 확인 요청이 들어왔다. 또한 �
   상태로 반영, "웹 배포" 섹션 제목을 "참고용, 앱 삭제됨 — 재배포 시 새로 생성
   필요"로 수정.
 - 다음 할 일: 없음 (현재 로컬/각자 설치 방식이 최종 배포 형태로 확정).
+
+## 2026-09-07~08 — 로컬 stdio 전용으로 전면 전환, 문서 정리
+
+- 배경: local-web-hybrid 구조(HTTP 서버 + `npx mcp-remote` 프록시로 Claude
+  Desktop과 연결)가 실제 사용 환경에서 반복적으로 실패함. 원인이 여러 겹이었음:
+  1. `start-with-server.bat`의 `timeout /t 2 /nobreak`가 Claude Desktop이
+     헤드리스로 배치를 실행할 때 stdin이 없어 "입력 리디렉션 파일을 찾을 수
+     없습니다" 에러로 즉시 종료됨.
+  2. 이를 `ping -n 3 127.0.0.1 >nul`로 고친 뒤에도, `npx mcp-remote`가
+     stdio↔HTTP 중계 과정에서 `SyntaxError: Unexpected end of JSON input`을
+     내며 불안정.
+  → 중계 구조 자체(HTTP 서버 + 별도 프록시 프로세스)가 근본 원인이라 판단,
+    구조를 걷어내기로 결정.
+- 조치: `src/index.js`를 `express` + `StreamableHTTPServerTransport` 구조에서
+  `StdioServerTransport`로 교체. `createServer()`(4개 도구 로직)는 전혀
+  손대지 않음. 제거된 것: express 라우팅, `?key=` 인증 미들웨어(timingSafeEqual
+  비교), rate limit 미들웨어(분당/일일/24시간 차단 3단계), `PORT` 바인딩.
+  `package.json`의 `name`을 `construction-alert-mcp`에서
+  `seoul-construction-mcp`로 통일(코드 내부 `serverInfo.name`도 동일하게
+  변경), `express` 의존성 제거·`zod` 명시적 추가.
+- 실측 검증: `node --check` 통과, stdin으로 `initialize`/`tools/list` JSON-RPC
+  요청을 직접 넣어 4개 도구 이름과 정상 응답 확인. 이후 Claude Desktop에
+  등록해 `search_construction_projects`(gu_name=서초구)로 실제 데이터(강남순환
+  도시고속도로 8공구 등) 조회까지 확인.
+- Claude Desktop 등록 과정에서 겪은 추가 트러블(향후 재발 시 참고):
+  사용자의 Claude Desktop이 Microsoft Store(MSIX) 버전이라, 겉보기엔
+  표준 경로인 `%APPDATA%\Claude\claude_desktop_config.json`을 아무리 고쳐도
+  전혀 반영되지 않았음. 실제로 앱이 읽는 파일은
+  `%LOCALAPPDATA%\Packages\Claude_<임의문자열>\LocalCache\Roaming\Claude\claude_desktop_config.json`
+  (Windows 앱 샌드박스 가상화 경로)이었음 — 이 파일을 수정하고 나서야 정상
+  연결됨. 또한 `"command": "node"`보다 `"command": "C:\\Program
+  Files\\nodejs\\node.exe"`처럼 전체 경로를 쓰는 쪽이 더 안정적이었음
+  (hwpx-mcp 등 기존에 잘 되던 다른 MCP들도 전체 경로 방식을 쓰고 있었음).
+- 문서 정리: README.md를 stdio 전용 기준으로 전면 재작성 —
+  `DEPLOY_MODE`/`MCP_ACCESS_KEY`/`PORT`/`flyctl deploy` 등 웹 배포 잔재 문구를
+  전부 제거하고, 비개발자가 처음부터 따라 할 수 있는 설치 가이드(Node.js
+  확인 → 인증키 발급 → clone → Claude Desktop/Code 등록, 트러블슈팅 표 포함)로
+  재작성. `.env.example`도 `SEOUL_OPENAPI_KEY` 하나만 남기고 나머지(웹 배포용
+  변수)는 제거.
+- 다음 할 일: 없음 — 로컬 stdio 방식이 최종 배포 형태로 확정. 집 PC에도 동일
+  방식으로 등록 예정(사용자가 직접 진행하거나 다음 세션에서 지원).
